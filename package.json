@@ -1,0 +1,40 @@
+{
+  "name": "homebridge-sengled-bulbs",
+  "version": "0.0.1",
+  "description": "A unoffical Homebridge plugin for controlling sengled accessories.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/sammy1881/homebridge-sengled-bulbs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sammy1881/homebridge-sengled-bulbs/issues"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=6.9.2",
+    "homebridge": ">=0.2.0"
+  },
+  "dependencies": {
+    "axios": "^0.21.1",
+    "axios-cookiejar-support": "^1.0.1",
+    "moment": "^2.29.1"
+  },
+  "keywords": [
+    "siri",
+    "sengled",
+    "homebridge",
+    "homebridge-plugin",
+    "ios",
+    "homekit"
+  ],
+  "author": "Sachin Pathak",
+  "license": "MIT",
+  "homepage": "https://github.com/sammy1881/homebridge-sengled-bulbs#readme",
+  "directories": {
+    "lib": "lib"
+  }
+}
