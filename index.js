@@ -19,19 +19,18 @@ function SengledHubPlatform(log, config, api) {
 	this.log = log;
 	this.config = config;
 	this.accessories = {};
-	this.cache_timeout = 10; // seconds
+	this.cache_timeout = 60; // seconds
 	this.debug = config['debug'] || false;
 	this.info = config['info'] || true;
 	this.username = config['username'];
 	this.password = config['password'];
-	this.cacheDuration = config['cacheDuration'] || 1000 * 15;
 
 	if (api) {
 		this.api = api;
 		this.api.on('didFinishLaunching', this.didFinishLaunching.bind(this));
 	}
 
-	this.client = new ElementHomeClient(log, this.debug, this.info, this.cacheDuration);
+	this.client = new ElementHomeClient(log, this.debug, this.info);
 }
 
 SengledHubPlatform.prototype.configureAccessory = function(accessory) {
