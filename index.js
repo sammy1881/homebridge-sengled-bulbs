@@ -135,36 +135,15 @@ SengledHubPlatform.prototype.addAccessory = function(data) {
 		newAccessory.context.brightness = 20;
 		newAccessory.context.colorTemperature = 20;
 
-		const lightbulbService = newAccessory.addService(
-            Service.Lightbulb,
-            data.name
-        );
-        lightbulbService
-            .getCharacteristic(Characteristic.On)
-            .on('set', this.setPowerState.bind(this, newAccessory.context))
-            .on('get', this.getPowerState.bind(this, newAccessory.context));
+		var lightbulbService = new Service.Lightbulb();
+		lightbulbService.displayName = data.name;
 
-        lightbulbService
-            .getCharacteristic(Characteristic.Brightness)
-            .on('set', this.setBrightness.bind(this, newAccessory.context))
-            .on('get', this.getBrightness.bind(this, newAccessory.context));
-
-        lightbulbService
-            .getCharacteristic(Characteristic.ColorTemperature)
-            .on(
-                'set',
-                this.setColorTemperature.bind(this, newAccessory.context)
-            )
-            .on(
-                'get',
-                this.getColorTemperature.bind(this, newAccessory.context)
-            );
-
-        newAccessory.on(
-            'identify',
-            this.identify.bind(this, newAccessory.context)
-        );
-        // this.setService(newAccessory);
+		var bringtnessCharacterstics = new Characteristic.Brightness(UUIDGen.generate(data.id + "1"));
+		lightbulbService.addCharacteristic(bringtnessCharacterstics);		
+		var colorTemperatureCharacterstics = new Characteristic.ColorTemperature(UUIDGen.generate(data.id + "1"));
+		lightbulbService.addCharacteristic(colorTemperatureCharacterstics);
+		newAccessory.addService(lightbulbService, data.name);
+        this.setService(newAccessory);
 
         this.api.registerPlatformAccessories(
             'homebridge-sengled-bulbs',
@@ -276,12 +255,12 @@ SengledHubPlatform.prototype.setPowerState = function(thisLight, powerState, cal
 	return this.client.login(this.username, this.password).then(() => {
 		return this.client.deviceSetOnOff(thisLight.id, powerState);
 	}).then(() => {
-		thisLight.status = powerState;
+		//thisLight.status = powerState;
 		// callback(null, device.status);
-		//callback();
+		callback();
 	}).catch((err) => {
 		this.log("Failed to set power state to", powerState);
-		//callback(err);
+		callback(err);
 	});
 };
 
@@ -321,12 +300,12 @@ SengledHubPlatform.prototype.setBrightness = function(thisLight, brightness, cal
 		callback();
 		return this.client.deviceSetBrightness(thisLight.id, brightness);
 	}).then(() => {
-		thisLight.brightness = brightness;
+		//thisLight.brightness = brightness;
 		// callback(null, device.brightness);
-		//callback();
+		callback();
 	}).catch((err) => {
 		this.log("Failed to set brightness to", brightness);
-		//callback(err);
+		callback(err);
 	});
 };
 
