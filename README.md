@@ -2,7 +2,7 @@
 
 An unoffical [Homebridge](https://github.com/nfarina/homebridge) platform plugin for Sengled accessories.
 
-This plugin uses the existing Sengled Element Home app infrastructure to allow you to control your Sengled accessories that uses zigbee.
+This plugin uses the existing Sengled Element Home app infrastructure to allow you to control your Sengled accessories that uses zigbee. It'll let you turn on/off the lights and control brightness and color temperature using the Home app.
 
 Provide your username and password and register as a platform, and it will auto-detect the light bulb you have registered.
 
@@ -19,6 +19,8 @@ If you encounter anything out of this product. Issue and Pull Request is welcome
 3. Update your configuration file. See below for a sample.
 
 # Configuration
+
+![Screenshot] (config.png)
 
 Configuration sample:
 

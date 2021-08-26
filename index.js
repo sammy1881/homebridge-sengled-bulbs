@@ -325,7 +325,7 @@ SengledHubPlatform.prototype.setColorTemperature = function(thisLight, colortemp
 	let me = this;
 	if (me.debug) me.log("++++ setColortemperature: " + thisLight.name + " status colortemperature to " + colortemperature);
 	colortemperature = colortemperature || 0;
-	colortemperature = Math.min(Math.round(numberMap(colortemperature, 140, 400, 0, 255)),255);
+	colortemperature = Math.min(Math.round(numberMap(colortemperature, 140, 500, 100, 0)),100);
 	if (me.debug) me.log("++++ Sending device: " + thisLight.name + " status colortemperature to " + colortemperature);
 
 	return this.client.login(this.username, this.password).then(() => {
@@ -351,7 +351,7 @@ SengledHubPlatform.prototype.getColorTemperature = function(
         callback(
             null,
             Math.round(
-                numberMap(thisLight.colorTemperature || 0, 0, 100, 140, 500)
+                numberMap(thisLight.colorTemperature || 0, 100, 0, 140, 500)
             )
         );
     } else {
