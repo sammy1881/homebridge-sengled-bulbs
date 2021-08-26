@@ -21,15 +21,17 @@ function SengledHubPlatform(log, config, api) {
 	this.accessories = {};
 	this.cache_timeout = 10; // seconds
 	this.debug = config['debug'] || false;
+	this.info = config['info'] || true;
 	this.username = config['username'];
 	this.password = config['password'];
+	this.cacheDuration = config['cacheDuration'] || 1000 * 15;
 
 	if (api) {
 		this.api = api;
 		this.api.on('didFinishLaunching', this.didFinishLaunching.bind(this));
 	}
 
-	this.client = new ElementHomeClient(log, this.debug);
+	this.client = new ElementHomeClient(log, this.debug, this.info, this.cacheDuration);
 }
 
 SengledHubPlatform.prototype.configureAccessory = function(accessory) {
@@ -123,13 +125,12 @@ SengledHubPlatform.prototype.addAccessory = function(data) {
 		let uuid = UUIDGen.generate(data.id);
 		// 5 == Accessory.Categories.LIGHTBULB
 		// 8 == Accessory.Categories.SWITCH
-		var newAccessory = new Accessory(data.id, uuid, 8);
-		newAccessory.name = data.name
-		
+		var newAccessory = new Accessory(data.id, uuid, 5);
+		newAccessory.name = data.name;
 		newAccessory.context.name = data.name;
 		newAccessory.context.id = data.id;
 		newAccessory.context.cb = null;
-		newAccessory.context.brightness = data.brightness
+		newAccessory.context.brightness = data.brightness;
 		// newAccessory.context.colorTemperature = data.colortemperature
 		newAccessory.context.on = data.status
 
@@ -253,7 +254,7 @@ SengledHubPlatform.prototype.setPowerState = function(thisPlug, powerState, call
 
 SengledHubPlatform.prototype.getPowerState = function(thisPlug, callback) {
 	let me = this;
-	if (this.debug) this.log("Getting device: " + thisPlug.name + " status");
+	if (this.debug) this.log("Getting device PowerState: " + thisPlug.name + " status");
 	if (this.accessories[thisPlug.id]) {
 		return this.client.login(this.username, this.password).then(() => {
 			return this.client.getDevices();
