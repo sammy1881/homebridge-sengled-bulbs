@@ -36,7 +36,7 @@
             "Info": {
                 "title": "Info",
                 "type": "boolean",
-                "default": true,
+                "default": false,
                 "description": "This will enable more logging information from the plugin."
             }
         }

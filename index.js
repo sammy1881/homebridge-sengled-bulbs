@@ -322,41 +322,25 @@ SengledHubPlatform.prototype.setBrightness = function(thisLight, brightness, cal
 		callback();
 		return this.client.deviceSetBrightness(thisLight.id, brightness);
 	}).then(() => {
-		// thisLight.brightness = brightness;
+		thisLight.brightness = brightness;
 		// callback(null, device.brightness);
-		callback();
+		//callback();
 	}).catch((err) => {
 		this.log("Failed to set brightness to", brightness);
-		callback(err);
+		//callback(err);
 	});
 };
 
 SengledHubPlatform.prototype.getBrightness = function(thisLight, callback) {
-	let me = this;
-	if (this.debug) this.log("Getting device: " + thisLight.id + " status");
-	if (this.accessories[thisLight.id]) {
-		return this.client.login(this.username, this.password).then(() => {
-			return this.client.getDevices();
-		}).then(devices => {
-			return devices.find((device) => {
-				return device.id.includes(thisLight.id);
-			});
-		}).then((device) => {
-			this.log("+++ device");
-			this.log(device);
-			if (typeof device === 'undefined') {
-				if (this.debug) this.log("Removing undefined device", thisLight.name);
-				this.removeAccessory(thisLight)
-			} else {
-				var brightness = Math.round(numberMap(device.brightness, 0, 255, 0, 100));
-				if (this.debug) this.log("getBrightnessState complete: " + device.name + " " + thisLight.name + " is " + device.brightness + " " + brightness);
-				thisLight.brightness = brightness;
-				callback(null, brightness);
-			}
-		});
-	} else {
-		callback(new Error("Device not found"));
-	}
+    if (this.accessories[thisLight.id]) {
+        this.log('Getting Brightness: %s %s', thisLight.id, thisLight.name);
+        callback(
+            null,
+            Math.round(numberMap(thisLight.brightness || 0, 0, 255, 0, 100))
+        );
+    } else {
+        callback(new Error('Device not found'));
+    }
 };
 
 SengledHubPlatform.prototype.setColorTemperature = function(thisLight, colortemperature, callback) {
@@ -376,30 +360,25 @@ SengledHubPlatform.prototype.setColorTemperature = function(thisLight, colortemp
 	});
 };
 
-SengledHubPlatform.prototype.getColorTemperature = function(thisLight, callback) {
-	let me = this;
-	if (this.debug) this.log("Getting device: " + thisLight.id + " colortemperature");
-	if (this.accessories[thisLight.id]) {
-		return this.client.login(this.username, this.password).then(() => {
-			return this.client.getDevices();
-		}).then(devices => {
-			return devices.find((device) => {
-				return device.id.includes(thisLight.id);
-			});
-		}).then((device) => {
-			if (typeof device === 'undefined') {
-				if (me.debug) me.log("Removing undefined device", thisLight.name);
-				this.removeAccessory(thisLight)
-			} else {
-				var colortemperature = Math.round(numberMap(device.colortemperature, 0, 255, 140, 400));
-				if (me.debug) me.log("getColortemperature complete: " + device.name + " " + thisLight.name + " is " + device.colortemperature + " " + colortemperature);
-				thisLight.colorTemperature = colortemperature;
-				callback(null, colortemperature);
-			}
-		});
-	} else {
-		callback(new Error("Device not found"));
-	}
+SengledHubPlatform.prototype.getColorTemperature = function(
+    thisLight,
+    callback
+) {
+    if (this.accessories[thisLight.id]) {
+        this.log(
+            'Getting Color Temperature: %s %s',
+            thisLight.id,
+            thisLight.name
+        );
+        callback(
+            null,
+            Math.round(
+                numberMap(thisLight.colorTemperature || 0, 0, 100, 140, 500)
+            )
+        );
+    } else {
+        callback(new Error('Device not found'));
+    }
 };
 
 SengledHubPlatform.prototype.identify = function(thisLight, paired, callback) {
