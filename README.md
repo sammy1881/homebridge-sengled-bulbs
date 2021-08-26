@@ -20,7 +20,7 @@ If you encounter anything out of this product. Issue and Pull Request is welcome
 
 # Configuration
 
-![Screenshot] (config.png)
+![](config.png)
 
 Configuration sample:
 
