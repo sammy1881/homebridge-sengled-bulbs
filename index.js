@@ -260,7 +260,7 @@ SengledHubPlatform.prototype.setPowerState = function(thisLight, powerState, cal
 		callback();
 	}).catch((err) => {
 		this.log("Failed to set power state to", powerState);
-		callback(err);
+		//callback(err);
 	});
 };
 
@@ -305,7 +305,7 @@ SengledHubPlatform.prototype.setBrightness = function(thisLight, brightness, cal
 		callback();
 	}).catch((err) => {
 		this.log("Failed to set brightness to", brightness);
-		callback(err);
+		//callback(err);
 	});
 };
 
@@ -334,7 +334,7 @@ SengledHubPlatform.prototype.setColorTemperature = function(thisLight, colortemp
 		callback();
 	}).catch((err) => {
 		this.log("Failed to set brightness to", colortemperature);
-		callback(err);
+		//callback(err);
 	});
 };
 
