@@ -125,9 +125,10 @@ SengledHubPlatform.prototype.addAccessory = function(data) {
 
 	if (!this.accessories[data.id]) {
 		let uuid = UUIDGen.generate(data.id);
+		let displayName = !(data.name) ? data.id : data.name;
 		// 5 == Accessory.Categories.LIGHTBULB
 		// 8 == Accessory.Categories.SWITCH
-		var newAccessory = new Accessory(data.id, uuid, 5);
+		var newAccessory = new Accessory(displayName, uuid, 5);
 		newAccessory.context.name = data.name;
 		newAccessory.context.id = data.id;
 		newAccessory.context.cb = null;
