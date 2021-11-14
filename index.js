@@ -87,8 +87,15 @@ SengledHubPlatform.prototype.deviceDiscovery = function() {
 				me.addAccessory(devices[i]);
 			} else {
 				existing.status = devices[i].status;
-                existing.brightness = devices[i].brightness;
-                existing.colorTemperature = devices[i].colorTemperature;
+                		existing.brightness = devices[i].brightness;
+                		existing.colorTemperature = devices[i].colorTemperature;
+				existing.colorMode = devices[i].colorMode;
+				existing.rgbColorR = devices[i].rgbColorR;
+				existing.rgbColorG = devices[i].rgbColorG;
+				existing.rgbColorB = devices[i].rgbColorB
+				existing.isOnline = devices[i].isOnline;
+				existing.signalQuality = devices[i].signalQuality;
+
 				if (me.debug) me.log("Skipping existing device", i);
 			}
 		}
