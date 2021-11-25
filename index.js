@@ -1,10 +1,8 @@
 'use strict';
 
 let ElementHomeClient = require('./lib/client');
+let Color = require('./lib/color');
 let Accessory, Service, Characteristic, UUIDGen;
-
-const numberMap = (value, x1, y1, x2, y2) =>
-	((value - x1) * (y2 - x2)) / (y1 - x1) + x2;
 
 module.exports = function(homebridge) {
 	Accessory = homebridge.platformAccessory;
@@ -66,10 +64,23 @@ SengledHubPlatform.prototype.didFinishLaunching = function() {
 	// for (let index in me.accessories) {
 	// 	me.removeAccessory(me.accessories[index]);
 	// }
-	
+
 	this.deviceDiscovery();
 	setInterval(me.deviceDiscovery.bind(me), this.cache_timeout * 6000);
 };
+
+// Update the homebridge context from a Sengled device
+function UpdateContextFromDevice(context, device) {
+	context.name = device.name;
+	context.id = device.id;
+	context.status = device.status;
+	context.brightness = device.brightness;
+	context.minBrightness = device.minBrightness;
+	context.maxBrightness = device.maxBrightness;
+	context.color = device.color; // by ref
+	context.isOnline = device.isOnline;
+	context.signalQuality = device.signalQuality;
+}
 
 SengledHubPlatform.prototype.deviceDiscovery = function() {
 	let me = this;
@@ -86,15 +97,7 @@ SengledHubPlatform.prototype.deviceDiscovery = function() {
 				me.log("Adding device: ", devices[i].id, devices[i].name);
 				me.addAccessory(devices[i]);
 			} else {
-				existing.status = devices[i].status;
-                		existing.brightness = devices[i].brightness;
-                		existing.colorTemperature = devices[i].colorTemperature;
-				existing.colorMode = devices[i].colorMode;
-				existing.rgbColorR = devices[i].rgbColorR;
-				existing.rgbColorG = devices[i].rgbColorG;
-				existing.rgbColorB = devices[i].rgbColorB
-				existing.isOnline = devices[i].isOnline;
-				existing.signalQuality = devices[i].signalQuality;
+				UpdateContextFromDevice(existing.context, devices[i]);
 
 				if (me.debug) me.log("Skipping existing device", i);
 			}
@@ -132,26 +135,40 @@ SengledHubPlatform.prototype.addAccessory = function(data) {
 
 	if (!this.accessories[data.id]) {
 		let uuid = UUIDGen.generate(data.id);
+
 		let displayName = !(data.name) ? data.id : data.name;
 		// 5 == Accessory.Categories.LIGHTBULB
 		// 8 == Accessory.Categories.SWITCH
 		var newAccessory = new Accessory(displayName, uuid, 5);
-		newAccessory.context.name = data.name;
-		newAccessory.context.id = data.id;
-		newAccessory.context.cb = null;
-		newAccessory.context.status = true;
-		newAccessory.context.brightness = 20;
-		newAccessory.context.colorTemperature = 20;
+		UpdateContextFromDevice(newAccessory.context, data);
+
+		me.log(newAccessory.context);
 
 		var lightbulbService = new Service.Lightbulb();
 		lightbulbService.displayName = data.name;
 
 		var bringtnessCharacterstics = new Characteristic.Brightness(UUIDGen.generate(data.id + "1"));
-		lightbulbService.addCharacteristic(bringtnessCharacterstics);		
-		var colorTemperatureCharacterstics = new Characteristic.ColorTemperature(UUIDGen.generate(data.id + "1"));
+		lightbulbService.addCharacteristic(bringtnessCharacterstics);
+
+		// Note: Sengled bulbs like the E12-N1E appear to have leds dedicated to a range of color temperatures for white
+		// light in addition to the RGB lights.  The colorMode indicates if using white light or color.  Setting the lights
+		// to white light mode is much brighter than setting a color via RGB mode, so it's desirable to use the white light
+		// mode. Using Sengled's homekit "capable" hub resulted in Homekit only using the color mode, regardless of the
+		// setting. To work-around, this plugin treats setting the color temperature as changing to white light mode, and
+		// setting hue or saturation as switching to color mode. Seems to work even if that's not the intended use.
+
+		var colorTemperatureCharacterstics = new Characteristic.ColorTemperature(UUIDGen.generate(data.id + "2"));
 		lightbulbService.addCharacteristic(colorTemperatureCharacterstics);
+
+		var hueCharacterstics = new Characteristic.Hue(UUIDGen.generate(data.id + "3"));
+		lightbulbService.addCharacteristic(hueCharacterstics);
+
+		var saturationCharacterstics = new Characteristic.Saturation(UUIDGen.generate(data.id + "4"));
+		lightbulbService.addCharacteristic(saturationCharacterstics);
+
 		newAccessory.addService(lightbulbService, data.name);
-        this.setService(newAccessory);
+
+	this.setService(newAccessory);
 
         this.api.registerPlatformAccessories(
             'homebridge-sengled-bulbs',
@@ -207,11 +224,25 @@ SengledHubPlatform.prototype.setService = function(accessory) {
 		.on('set', this.setPowerState.bind(this, accessory.context))
 		.on('get', this.getPowerState.bind(this, accessory.context));
 	lightbulbService.getCharacteristic(Characteristic.Brightness)
+		.setProps({
+			minValue: accessory.context.minBrightness,
+			maxValue: accessory.context.maxBrightness
+		})
 		.on('set', this.setBrightness.bind(this, accessory.context))
 		.on('get', this.getBrightness.bind(this, accessory.context));
 	lightbulbService.getCharacteristic(Characteristic.ColorTemperature)
+		.setProps({
+			minValue: accessory.context.color.minColorTemperature,
+			maxValue: accessory.context.color.maxColorTemperature
+		})
 		.on('set', this.setColorTemperature.bind(this, accessory.context))
 		.on('get', this.getColorTemperature.bind(this, accessory.context));
+	lightbulbService.getCharacteristic(Characteristic.Hue)
+		.on('set', this.setHue.bind(this, accessory.context))
+		.on('get', this.getHue.bind(this, accessory.context));
+	lightbulbService.getCharacteristic(Characteristic.Saturation)
+		.on('set', this.setSaturation.bind(this, accessory.context))
+		.on('get', this.getSaturation.bind(this, accessory.context));
 
 	accessory.on('identify', this.identify.bind(this, accessory.context));
 };
@@ -230,13 +261,16 @@ SengledHubPlatform.prototype.getInitState = function(accessory, data) {
 
 	info.setCharacteristic(Characteristic.SerialNumber, accessory.context.id);
 	const lightbulbService = accessory.getService(Service.Lightbulb);
-    lightbulbService.getCharacteristic(Characteristic.On).getValue();
+	lightbulbService.getCharacteristic(Characteristic.On).getValue();
 
-    lightbulbService.getCharacteristic(Characteristic.Brightness).getValue();
+	lightbulbService.getCharacteristic(Characteristic.Brightness).getValue();
 
-    lightbulbService
-        .getCharacteristic(Characteristic.ColorTemperature)
-        .getValue();
+	lightbulbService
+		.getCharacteristic(Characteristic.ColorTemperature)
+		.getValue();
+
+	lightbulbService.getCharacteristic(Characteristic.Hue).getValue();
+	lightbulbService.getCharacteristic(Characteristic.Saturation).getValue();
 
 	me.getState(accessory);
 };
@@ -254,6 +288,12 @@ SengledHubPlatform.prototype.getState = function(accessory) {
 	accessory.getService(Service.Lightbulb)
 		.getCharacteristic(Characteristic.ColorTemperature)
 		.getValue();
+	accessory.getService(Service.Lightbulb)
+		.getCharacteristic(Characteristic.Hue)
+		.getValue()
+	accessory.getService(Service.Lightbulb)
+		.getCharacteristic(Characteristic.Saturation)
+		.getValue()
 };
 
 SengledHubPlatform.prototype.setPowerState = function(thisLight, powerState, callback) {
@@ -300,30 +340,24 @@ SengledHubPlatform.prototype.getPowerState = function(thisLight, callback) {
 SengledHubPlatform.prototype.setBrightness = function(thisLight, brightness, callback) {
 	let me = this;
 	if (me.debug) me.log("++++ setBrightness: " + thisLight.name + " status brightness to " + brightness);
-	brightness = brightness || 0;
-	brightness = Math.round(numberMap(brightness, 0, 100, 0, 255));
+	brightness = brightness || thisLight.color.minBrightness;
 	if (me.debug) me.log("++++ Sending device: " + thisLight.name + " status brightness to " + brightness);
 
 	return this.client.login(this.username, this.password).then(() => {
-		callback();
 		return this.client.deviceSetBrightness(thisLight.id, brightness);
 	}).then(() => {
-		//thisLight.brightness = brightness;
-		// callback(null, device.brightness);
+		thisLight.brightness = brightness;
 		callback();
 	}).catch((err) => {
 		this.log("Failed to set brightness to", brightness);
-		//callback(err);
+		callback(err);
 	});
 };
 
 SengledHubPlatform.prototype.getBrightness = function(thisLight, callback) {
     if (this.accessories[thisLight.id]) {
-        this.log('Getting Brightness: %s %s', thisLight.id, thisLight.name);
-        callback(
-            null,
-            Math.round(numberMap(thisLight.brightness || 0, 0, 255, 0, 100))
-        );
+        if (this.debug) this.log('Getting Brightness: %s %s %s', thisLight.id, thisLight.name, thisLight.brightness);
+        callback( null, thisLight.brightness);
     } else {
         callback(new Error('Device not found'));
     }
@@ -332,17 +366,32 @@ SengledHubPlatform.prototype.getBrightness = function(thisLight, callback) {
 SengledHubPlatform.prototype.setColorTemperature = function(thisLight, colortemperature, callback) {
 	let me = this;
 	if (me.debug) me.log("++++ setColortemperature: " + thisLight.name + " status colortemperature to " + colortemperature);
-	colortemperature = colortemperature || 0;
-	colortemperature = Math.min(Math.round(numberMap(colortemperature, 140, 500, 100, 0)),100);
+	let sengledColorTemperature = colortemperature || thisLight.color.minColorTemperature;
+	sengledColorTemperature = Color.MiredsToSengledColorTemperature(sengledColorTemperature);
 	if (me.debug) me.log("++++ Sending device: " + thisLight.name + " status colortemperature to " + colortemperature);
 
 	return this.client.login(this.username, this.password).then(() => {
-		return this.client.deviceSetColorTemperature(thisLight.id, colortemperature);
+		return this.client.deviceSetColorTemperature(thisLight.id, sengledColorTemperature);
 	}).then(() => {
+		// Set the new color tempreature to the context.  This also updates hue and saturation.
+		thisLight.color.SetColorTemperature(colortemperature);
+
+		let accessory = me.accessories[thisLight.id];
+
+		if (accessory) {
+			let lightbulbService = accessory.getService(Service.Lightbulb);
+
+			// The light is now in "white light" mode.  Update hue and saturation to homekit.  This makes the
+			// color temperature circle in the color temperature setting match-ish color temperature (warm blue
+			// to cool orange-ish).
+			lightbulbService.getCharacteristic(Characteristic.Hue).updateValue(thisLight.color.hue);
+			lightbulbService.getCharacteristic(Characteristic.Saturation).updateValue(thisLight.color.saturation);
+		}
+
 		callback();
 	}).catch((err) => {
-		this.log("Failed to set brightness to", colortemperature);
-		//callback(err);
+		this.log("Failed to set colortemperature to " + colortemperature);
+		callback(err);
 	});
 };
 
@@ -352,23 +401,65 @@ SengledHubPlatform.prototype.getColorTemperature = function(
 ) {
     if (this.accessories[thisLight.id]) {
         this.log(
-            'Getting Color Temperature: %s %s',
+            'Getting Color Temperature: %s %s %d',
             thisLight.id,
-            thisLight.name
+            thisLight.name,
+            thisLight.color.colorTemperature
         );
-        callback(
-            null,
-            Math.round(
-                numberMap(thisLight.colorTemperature || 0, 100, 0, 140, 500)
-            )
-        );
-    } else {
+        callback(null, thisLight.color.colorTemperature);
+    }else {
         callback(new Error('Device not found'));
     }
+};
+
+SengledHubPlatform.prototype.setHue = function(thisLight, hue, callback) {
+	if (this.debug) this.log("+++setHue: " + thisLight.name + " status hue to " + hue);
+	thisLight.color.SetHue(hue);
+	callback();
+};
+
+SengledHubPlatform.prototype.getHue = function(thisLight, callback) {
+	if (this.debug) this.log("+++getHue: " + thisLight.name + "  hue: " + thisLight.color.hue);
+	callback(null, thisLight.color.hue);
+};
+
+SengledHubPlatform.prototype.setSaturation = function(thisLight, saturation, callback) {
+	if (this.debug) this.log("+++setSaturation: " + thisLight.name + " status saturation to " + saturation);
+	thisLight.color.SetSaturation(saturation);
+
+
+	let rgbColor = Color.NormailizedRgbToSengledRgb(thisLight.color.rgbColor.r, thisLight.color.rgbColor.g, thisLight.color.rgbColor.b );
+
+	if (this.debug) this.log("++++ Sending device: " + thisLight.name + " rgb color to " + "r: " + rgbColor.r + " g: " + rgbColor.g + " b: " + rgbColor.b );
+
+	return this.client.login(this.username, this.password).then(() => {
+		return this.client.deviceSetRgbColor(thisLight.id, rgbColor);
+	}).then(() => {
+
+		// TODO: Should color temp be updated
+		// let accessory = this.accessories[thisLight.id];
+
+		// if (accessory) {
+		// 	let lightbulbService = accessory.getService(Service.Lightbulb);
+		//
+		//	lightbulbService.getCharacteristic(Characteristic.ColorTemperature).updateValue(thisLight.color.colorTemperature);
+		// }
+
+		callback();
+	}).catch((err) => {
+		this.log("Failed to set rgb color to ", thisLight.color.rgbColor);
+		callback(err);
+	});
+};
+
+
+SengledHubPlatform.prototype.getSaturation = function(thisLight, callback) {
+	if (this.debug) this.log("+++getSaturation: " + thisLight.name + " saturation: " + thisLight.color.saturation);
+	callback(null, thisLight.color.saturation);
 };
 
 SengledHubPlatform.prototype.identify = function(thisLight, paired, callback) {
 	let me = this;
 	if (me.debug) me.log("identify invoked: " + thisLight + " " + paired);
 	callback();
-}
+};
