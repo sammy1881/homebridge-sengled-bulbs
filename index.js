@@ -78,6 +78,7 @@ function UpdateContextFromDevice(context, device) {
 	context.color = device.color.data;
 	context.isOnline = device.isOnline;
 	context.signalQuality = device.signalQuality;
+	context.firmwareVersion = device.firmwareVersion;
 	context.manufacturer = "Sengled";
 	context.model = (device.productCode != null) ? device.productCode : "Sengled Hub";
 }
@@ -277,6 +278,10 @@ SengledLightAccessory.prototype.getInitState = function() {
 	info.setCharacteristic(Characteristic.Model, me.context.model);
 	info.setCharacteristic(Characteristic.SerialNumber, me.context.id);
 
+	if (me.context.firmwareVersion != undefined){
+		info.setCharacteristic(Characteristic.FirmwareRevision, me.context.firmwareVersion);
+	}
+
 	this.getState();
 };
 
@@ -370,7 +375,7 @@ SengledLightAccessory.prototype.setColorTemperature = function(colortemperature,
 	let me = this;
 	if (me.debug) me.log("++++ setColortemperature: " + me.context.name + " status colortemperature to " + colortemperature);
 	let sengledColorTemperature = colortemperature || this.color.getMinColorTemperature();
-	sengledColorTemperature = Color.MiredsToSengledColorTemperature(sengledColorTemperature);
+	sengledColorTemperature = Color.MiredsToSengledColorTemperature(sengledColorTemperature, this.color.getConfigData());
 	if (me.debug) me.log("++++ Sending device: " + this.getName() + " status colortemperature to " + colortemperature);
 
 	return this.client.login(this.username, this.password).then(() => {
@@ -416,7 +421,11 @@ SengledLightAccessory.prototype.getHue = function(callback) {
 SengledLightAccessory.prototype.setSaturation = function(saturation, callback) {
 	if (this.debug) this.log("+++setSaturation: " + this.getName() + " status saturation to " + saturation);
 
+	// Backup color data in the event of failure.
+	let oldColorData = this.color.copyData();
+
 	return this.client.login(this.username, this.password).then(() => {
+
 		this.color.setSaturation(saturation);
 
 		let normalizedRgb = this.color.getRgb();
@@ -436,6 +445,7 @@ SengledLightAccessory.prototype.setSaturation = function(saturation, callback) {
 		callback();
 	}).catch((err) => {
 		this.log("Failed to set rgb color to ", this.color.getRgb());
+		this.color.assignData(oldColorData); // restore color state.
 		this.log(err);
 		callback(err);
 	});
