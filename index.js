@@ -437,6 +437,12 @@ SengledLightAccessory.prototype.setSaturation = function(saturation, callback) {
 	}).then(() => {
 
 		// The light is now in "color light" mode.
+
+		// The sengled API for setting RGB turns on the light.  Ideally, this would behave like color temp, but
+		// but update to reality for now.
+		this.context.status = true;
+		this.lightbulbService.getCharacteristic(Characteristic.On).updateValue(this.context.status);
+
 		// TODO: Should color temp be updated
 		//
 		//	this.lightbulbService.getCharacteristic(Characteristic.ColorTemperature).updateValue(this.color.getColorTemperature());
