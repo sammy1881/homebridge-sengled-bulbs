@@ -339,12 +339,16 @@ SengledLightAccessory.prototype.getPowerState = function(callback) {
 	}).then((device) => {
 		if (typeof device === 'undefined') {
 			if (this.debug) this.log("Removing undefined device", this.getName());
-			this.platform.removeAccessory(this.accessory)
+			this.platform.removeAccessory(this.accessory);
 		} else {
 			if (this.debug) this.log("getPowerState complete: " + device.name + " " + this.getName() + " is " + device.status);
 			this.context.status = device.status;
 			callback(null, device.status);
 		}
+	}).catch((err) => {
+		this.log("Failed to get power state");
+		this.log(err.message);
+		callback(err);
 	});
 };
 
@@ -390,8 +394,8 @@ SengledLightAccessory.prototype.setColorTemperature = function(colortemperature,
 			// color temperature circle in the color temperature setting match-ish color temperature (warm blue
 			// to cool orange-ish).
 
-			this.lightbulbService.getCharacteristic(Characteristic.Saturation).updateValue(this.color.getSaturation());
 			this.lightbulbService.getCharacteristic(Characteristic.Hue).updateValue(this.color.getHue());
+			this.lightbulbService.getCharacteristic(Characteristic.Saturation).updateValue(this.color.getSaturation());
 		}
 		callback();
 	}).catch((err) => {
@@ -431,7 +435,7 @@ SengledLightAccessory.prototype.setSaturation = function(saturation, callback) {
 		this.color.setSaturation(saturation);
 
 		let normalizedRgb = this.color.getRgb();
-		let rgbColor = Color.NormailizedRgbToSengledRgb(normalizedRgb.r, normalizedRgb.g, normalizedRgb.b );
+		let rgbColor = Color.NormalizedRgbToSengledRgb(normalizedRgb);
 
 		if (this.debug) this.log("++++ Sending device: " + this.getName() + " rgb color to " + "r: " + rgbColor.r + " g: " + rgbColor.g + " b: " + rgbColor.b );
 
