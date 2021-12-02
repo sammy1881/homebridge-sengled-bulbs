@@ -210,7 +210,7 @@ class SengledLightAccessory {
 		this.platform = platform;
 
 		this.brightness = new Brightness(this.context.brightness);
-		this.color = new Color(this.context.color);
+		this.color = new Color(this.context.color, this.log);
 
 		this.lightbulbService = accessory.getService(Service.Lightbulb)
 			|| accessory.addService(Service.Lightbulb);
@@ -389,8 +389,9 @@ SengledLightAccessory.prototype.setColorTemperature = function(colortemperature,
 			// The light is now in "white light" mode.  Update hue and saturation to homekit.  This makes the
 			// color temperature circle in the color temperature setting match-ish color temperature (warm blue
 			// to cool orange-ish).
-			this.lightbulbService.getCharacteristic(Characteristic.Hue).updateValue(this.color.getHue());
+
 			this.lightbulbService.getCharacteristic(Characteristic.Saturation).updateValue(this.color.getSaturation());
+			this.lightbulbService.getCharacteristic(Characteristic.Hue).updateValue(this.color.getHue());
 		}
 		callback();
 	}).catch((err) => {
@@ -415,6 +416,7 @@ SengledLightAccessory.prototype.setHue = function(hue, callback) {
 
 SengledLightAccessory.prototype.getHue = function(callback) {
 	if (this.debug) this.log("+++getHue: " + this.name + "  hue: " + this.color.getHue());
+
 	callback(null, this.color.getHue());
 };
 
@@ -439,14 +441,9 @@ SengledLightAccessory.prototype.setSaturation = function(saturation, callback) {
 		// The light is now in "color light" mode.
 
 		// The sengled API for setting RGB turns on the light.  Ideally, this would behave like color temp, but
-		// but update to reality for now.
+		// but update to reflect light state for now.
 		this.context.status = true;
 		this.lightbulbService.getCharacteristic(Characteristic.On).updateValue(this.context.status);
-
-		// TODO: Should color temp be updated
-		//
-		//	this.lightbulbService.getCharacteristic(Characteristic.ColorTemperature).updateValue(this.color.getColorTemperature());
-		// }
 
 		callback();
 	}).catch((err) => {
