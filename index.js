@@ -125,7 +125,11 @@ SengledHubPlatform.prototype.deviceDiscovery = function() {
 		}
 
 		if (me.debug) me.log("Discovery complete");
-		// if (me.debug) me.log(JSON.stringify(me.accessories, null, 4));
+		if (me.debug) me.log(JSON.stringify(me.accessories, null, 4));
+	}).catch((err) => {
+		this.log("Failed deviceDiscovery: ");
+		this.log(me.debug ? err : err.message);
+>>>>>>> Logins are currently timing out via the existing method, but this seems to work with a higher timout.
 	});
 };
 
@@ -330,26 +334,28 @@ SengledLightAccessory.prototype.getPowerState = function(callback) {
 	let me = this;
 	if (this.debug) this.log("Getting device PowerState: " + this.getName() + " status");
 
-	return this.client.login(this.username, this.password).then(() => {
-		return this.client.getDevices();
-	}).then(devices => {
-		return devices.find((device) => {
-			return device.id.includes(this.getId());
-		});
-	}).then((device) => {
-		if (typeof device === 'undefined') {
-			if (this.debug) this.log("Removing undefined device", this.getName());
-			this.platform.removeAccessory(this.accessory);
-		} else {
-			if (this.debug) this.log("getPowerState complete: " + device.name + " " + this.getName() + " is " + device.status);
-			this.context.status = device.status;
-			callback(null, device.status);
-		}
-	}).catch((err) => {
-		this.log("Failed to get power state");
-		this.log(err.message);
-		callback(err);
-	});
+	callback(null, this.context.status);
+
+//	return this.client.login(this.username, this.password).then(() => {
+//		return this.client.getDevices();
+//	}).then(devices => {
+//		return devices.find((device) => {
+//			return device.id.includes(this.getId());
+//		});
+//	}).then((device) => {
+//		if (typeof device === 'undefined') {
+//			if (this.debug) this.log("Removing undefined device", this.getName());
+//			this.platform.removeAccessory(this.accessory);
+//		} else {
+//			if (this.debug) this.log("getPowerState complete: " + device.name + " " + this.getName() + " is " + device.status);
+//			this.context.status = device.status;
+//			callback(null, device.status);
+//		}
+//	}).catch((err) => {
+//		this.log("Failed to get power state");
+//		this.log(err.message);
+//		callback(err);
+//	});
 };
 
 SengledLightAccessory.prototype.setBrightness = function(brightness, callback) {
