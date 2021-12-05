@@ -335,27 +335,6 @@ SengledLightAccessory.prototype.getPowerState = function(callback) {
 	if (this.debug) this.log("Getting device PowerState: " + this.getName() + " status");
 
 	callback(null, this.context.status);
-
-//	return this.client.login(this.username, this.password).then(() => {
-//		return this.client.getDevices();
-//	}).then(devices => {
-//		return devices.find((device) => {
-//			return device.id.includes(this.getId());
-//		});
-//	}).then((device) => {
-//		if (typeof device === 'undefined') {
-//			if (this.debug) this.log("Removing undefined device", this.getName());
-//			this.platform.removeAccessory(this.accessory);
-//		} else {
-//			if (this.debug) this.log("getPowerState complete: " + device.name + " " + this.getName() + " is " + device.status);
-//			this.context.status = device.status;
-//			callback(null, device.status);
-//		}
-//	}).catch((err) => {
-//		this.log("Failed to get power state");
-//		this.log(err.message);
-//		callback(err);
-//	});
 };
 
 SengledLightAccessory.prototype.setBrightness = function(brightness, callback) {
