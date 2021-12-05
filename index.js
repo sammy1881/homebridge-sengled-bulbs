@@ -125,7 +125,7 @@ SengledHubPlatform.prototype.deviceDiscovery = function() {
 		}
 
 		if (me.debug) me.log("Discovery complete");
-		if (me.debug) me.log(JSON.stringify(me.accessories, null, 4));
+		// if (me.debug) me.log(JSON.stringify(me.accessories, null, 4));
 	}).catch((err) => {
 		this.log("Failed deviceDiscovery: ");
 		this.log(me.debug ? err : err.message);
