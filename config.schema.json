@@ -38,6 +38,20 @@
                 "type": "boolean",
                 "default": false,
                 "description": "This will enable information from the plugin."
+            },
+            "Timeout": {
+                "title": "Timeout",
+                "type": "integer",
+                "default": 4000,
+                "minimum": 2000,
+                "maximum": 30000,
+                "description": "The timeout in milliseconds to use for calls to the Sengled Web API. High values may result in other errors."
+            },
+            "AlternateLoginApi": {
+                "title": "AlternateLoginApi",
+                "type": "boolean",
+                "default": false,
+                "description": "Uses an alternative login API if for some reason logins fail even with increased timeout."
             }
         }
     }
