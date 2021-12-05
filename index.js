@@ -22,13 +22,15 @@ function SengledHubPlatform(log, config, api) {
 	this.info = config['info'] || true;
 	this.username = config['username'];
 	this.password = config['password'];
+	this.useAlternateLoginApi = config['AlternateLoginApi'];
+	this.timeout = config['Timeout'];
 
 	if (api) {
 		this.api = api;
 		this.api.on('didFinishLaunching', this.didFinishLaunching.bind(this));
 	}
 
-	this.client = new ElementHomeClient(log, this.debug, this.info);
+	this.client = new ElementHomeClient(this.useAlternateLoginApi, this.timeout, log, this.debug, this.info);
 }
 
 SengledHubPlatform.prototype.configureAccessory = function(accessory) {
