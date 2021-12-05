@@ -58,7 +58,7 @@ SengledHubPlatform.prototype.configureAccessory = function(accessory) {
 SengledHubPlatform.prototype.didFinishLaunching = function() {
 	let me = this;
 	if (me.debug) me.log("didFinishLaunching invoked ");
-	if (me.debug) me.log(JSON.stringify(me.accessories, null, 4));
+	// if (me.debug) me.log(JSON.stringify(me.accessories, null, 4));
 
 	// // dev-mode
 	// for (let index in me.accessories) {
@@ -125,7 +125,7 @@ SengledHubPlatform.prototype.deviceDiscovery = function() {
 		}
 
 		if (me.debug) me.log("Discovery complete");
-		if (me.debug) me.log(JSON.stringify(me.accessories, null, 4));
+		// if (me.debug) me.log(JSON.stringify(me.accessories, null, 4));
 	});
 };
 
@@ -270,7 +270,7 @@ class SengledLightAccessory {
 
 SengledLightAccessory.prototype.getInitState = function() {
 	let me = this;
-	if (me.debug) me.log("getInitState invoked: " + accessory + " " + data);
+	if (me.debug) me.log("getInitState invoked: " + this.accessory + " " + this.context);
 
 	let info = me.accessory.getService(Service.AccessoryInformation);
 
@@ -287,7 +287,7 @@ SengledLightAccessory.prototype.getInitState = function() {
 
 SengledLightAccessory.prototype.getState = function() {
 	let me = this;
-	if (me.debug) me.log("getState invoked: " + accessory);
+	if (me.debug) me.log("getState invoked: " + this.accessory);
 
 	me.lightbulbService.getCharacteristic(Characteristic.On).getValue();
 
