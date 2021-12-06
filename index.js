@@ -44,17 +44,16 @@ SengledHubPlatform.prototype.configureAccessory = function(accessory) {
 	if (this.accessories[accessoryId]) {
 		this.log("Duplicate accessory detected, removing existing if possible, otherwise removing this accessory", accessoryId);
 		try {
-			this.removeAccessory(this.accessories[accessoryId].accessory, accessoryId);
-			var sengledAccessory = this.setService(accessory);
+			this.removeAccessory(this.accessories[accessoryId], accessoryId);
+			this.accessories[accessoryId] = accessory;
+
 		} catch (error) {
 			this.removeAccessory(accessory, accessoryId);
-			var sengledAccessory = this.accessories[accessoryId];
 		}
-	} else {
-		var sengledAccessory = this.setService(accessory);
 	}
-
-	this.accessories[accessoryId] = sengledAccessory;
+	else {
+		this.accessories[accessoryId] = accessory;
+	}
 };
 
 SengledHubPlatform.prototype.didFinishLaunching = function() {
@@ -64,7 +63,7 @@ SengledHubPlatform.prototype.didFinishLaunching = function() {
 
 	// // dev-mode
 	// for (let index in me.accessories) {
-	// 	me.removeAccessory(me.accessories[index].accessory);
+	// 	me.removeAccessory(me.accessories[index]);
 	// }
 
 	this.deviceDiscovery();
@@ -100,28 +99,28 @@ SengledHubPlatform.prototype.deviceDiscovery = function() {
 				me.log("Adding device: ", devices[i].id, devices[i].name);
 				me.addAccessory(devices[i]);
 			} else {
-				UpdateContextFromDevice(existing.context, devices[i]);
-
-				if (me.debug) me.log("Skipping existing device", i);
+				if (me.debug) me.log("Updating existing device: ", devices[i].id, devices[i].name);
+				this.bindAndUpdateAccessory(existing, devices[i]);
 			}
 		}
 
 		// Check existing accessories exist in sengled devices
 		if (devices) {
 			for (let index in me.accessories) {
-				let acc = me.accessories[index];
-				acc.getState();
 				let found = devices.find((device) => {
 					return device.id.includes(index);
 				});
+
+				let accessory = me.accessories[index];
+
 				if (!found) {
 					me.log("Previously configured accessory not found, removing", index);
-					me.removeAccessory(me.accessories[index].accessory);
-				} else if (found.name != acc.context.name) {
-					me.log("Accessory name does not match device name, got " + found.name + " expected " + acc.context.name);
-					me.removeAccessory(me.accessories[index].accessory);
+					me.removeAccessory(accessory);
+				} else if (found.name != accessory.context.name) {
+					me.log("Accessory name does not match device name, got " + found.name + " expected " + accessory.context.name);
+					me.removeAccessory(accessory);
 					me.addAccessory(found);
-					me.log("Accessory removed & readded!");
+					me.log("Accessory removed & re-added!");
 				}
 			}
 		}
@@ -140,28 +139,25 @@ SengledHubPlatform.prototype.addAccessory = function(data) {
 	if (me.debug) me.log("addAccessory invoked: ");
 	if (me.debug) me.log(data);
 
-	if (!this.accessories[data.id]) {
-		let uuid = UUIDGen.generate(data.id);
+	if (this.accessories[data.id]) {
+		throw new Error("addAccessory invoked for an existing accessory: " + data.id );
+	}
 
-		let displayName = !(data.name) ? data.id : data.name;
-		// 5 == Accessory.Categories.LIGHTBULB
-		// 8 == Accessory.Categories.SWITCH
-		let newAccessory = new Accessory(displayName, uuid, 5);
-		UpdateContextFromDevice(newAccessory.context, data);
+	let uuid = UUIDGen.generate(data.id);
 
-		var sengledAccessory = this.setService(newAccessory);
+	let displayName = !(data.name) ? data.id : data.name;
+	// 5 == Accessory.Categories.LIGHTBULB
+	// 8 == Accessory.Categories.SWITCH
+	let newAccessory = new Accessory(displayName, uuid, 5);
 
-        	this.api.registerPlatformAccessories(
-			'homebridge-sengled-bulbs',
-			'SengledHub',
-			[newAccessory]
-        );
-    } else {
-	var sengledAccessory = this.accessories[data.id];
-	sengledAccessory.getInitState();
-    }
+	this.bindAndUpdateAccessory(newAccessory, data);
 
-    this.accessories[data.id] = sengledAccessory;
+	this.api.registerPlatformAccessories(
+		'homebridge-sengled-bulbs',
+		'SengledHub',
+		[newAccessory]);
+
+	this.accessories[data.id] = newAccessory;
 };
 
 /**
@@ -194,11 +190,17 @@ SengledHubPlatform.prototype.removeAccessory = function(accessory, accessoryId =
 	}
 };
 
-SengledHubPlatform.prototype.setService = function(accessory) {
+// Bind callbacks for light properties and update context data.
+SengledHubPlatform.prototype.bindAndUpdateAccessory = function(accessory, data) {
 	let me = this;
 	if (me.debug) me.log("setService invoked: ");
 	if (me.debug) me.log(accessory);
 
+	// Update context data for accessory.
+	UpdateContextFromDevice(accessory.context, data);
+
+	// Create the accessory wrapper to bind callbacks, track property changes,
+	// and update homebridge property values.
 	return new SengledLightAccessory(me, accessory, me.debug);
 };
 
@@ -267,17 +269,18 @@ class SengledLightAccessory {
 
 		this.accessory.on('identify', this.identify.bind(this));
 
-		this.getInitState();
+		this.InititializeState();
 	}
 
 	getName() { return this.context.name; }
 	getId() { return this.context.id; }
 };
 
-SengledLightAccessory.prototype.getInitState = function() {
+SengledLightAccessory.prototype.InititializeState = function() {
 	let me = this;
-	if (me.debug) me.log("getInitState invoked: " + this.accessory + " " + this.context);
+	if (me.debug) me.log("InitializeState invoked: " + this.accessory + " " + this.context);
 
+	// Set accessory information
 	let info = me.accessory.getService(Service.AccessoryInformation);
 
 	info.setCharacteristic(Characteristic.Manufacturer, me.context.manufacturer);
@@ -288,31 +291,33 @@ SengledLightAccessory.prototype.getInitState = function() {
 		info.setCharacteristic(Characteristic.FirmwareRevision, me.context.firmwareVersion);
 	}
 
-	this.getState();
-};
+	// Update homebridge to the latest state from sengled API.
 
-SengledLightAccessory.prototype.getState = function() {
-	let me = this;
-	if (me.debug) me.log("getState invoked: " + this.accessory);
-
-	me.lightbulbService.getCharacteristic(Characteristic.On).getValue();
+	me.lightbulbService.getCharacteristic(Characteristic.On).updateValue(this.context.status);
 
 	if (me.brightness.supportsBrightness())
 	{
-		me.lightbulbService.getCharacteristic(Characteristic.Brightness).getValue();
+		me.lightbulbService
+			.getCharacteristic(Characteristic.Brightness)
+			.updateValue(this.brightness.getValue());
 	}
 
 	if (me.color.supportsColorTemperature())
 	{
 		me.lightbulbService
 			.getCharacteristic(Characteristic.ColorTemperature)
-			.getValue();
+			.updateValue(this.color.getColorTemperature());
 	}
 
 	if (me.color.supportsRgb())
 	{
-		me.lightbulbService.getCharacteristic(Characteristic.Hue).getValue();
-		me.lightbulbService.getCharacteristic(Characteristic.Saturation).getValue();
+		me.lightbulbService
+			.getCharacteristic(Characteristic.Hue)
+			.updateValue(this.color.getHue());
+
+		me.lightbulbService
+			.getCharacteristic(Characteristic.Saturation)
+			.updateValue(this.color.getSaturation());
 	}
 };
 
