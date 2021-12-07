@@ -59,7 +59,7 @@ SengledHubPlatform.prototype.configureAccessory = function(accessory) {
 SengledHubPlatform.prototype.didFinishLaunching = function() {
 	let me = this;
 	if (me.debug) me.log("didFinishLaunching invoked ");
-	// if (me.debug) me.log(JSON.stringify(me.accessories, null, 4));
+	if (me.debug) me.log(me.accessories);
 
 	// // dev-mode
 	// for (let index in me.accessories) {
@@ -84,6 +84,11 @@ function UpdateContextFromDevice(context, device) {
 	context.model = (device.productCode != null) ? device.productCode : "Sengled Hub";
 }
 
+// Use to consistently fall back to id if name is not defined.
+function GetDeviceName(device) {
+	return !(device.name) ? device.id : device.name;
+}
+
 SengledHubPlatform.prototype.deviceDiscovery = function() {
 	let me = this;
 	if (me.debug) me.log("deviceDiscovery invoked");
@@ -92,41 +97,42 @@ SengledHubPlatform.prototype.deviceDiscovery = function() {
 		return this.client.getDevices();
 	}).then(devices => {
 		if (me.debug) me.log("Adding discovered devices");
-		for (let i in devices) {
-			let existing = me.accessories[devices[i].id];
+
+		// Accessory Registration.  For each device reported by the Sengled API:
+		// - Add the accessory if it has not already added.
+		// - If the Sengled API reports an updated name, remove and re-create the device.
+		// - Otherwise, bind callbacks and update the context sstate.
+		devices.forEach((device) => {
+			let existing = me.accessories[device.id];
+			let deviceName = GetDeviceName(device);
 
 			if (!existing) {
-				me.log("Adding device: ", devices[i].id, devices[i].name);
-				me.addAccessory(devices[i]);
-			} else {
-				if (me.debug) me.log("Updating existing device: ", devices[i].id, devices[i].name);
-				this.bindAndUpdateAccessory(existing, devices[i]);
+				me.log("Adding device: ", device.id, deviceName);
+				me.addAccessory(device);
+			} else if (deviceName != existing.displayName) {
+				me.log("Accessory name does not match device name, got \"" + deviceName + "\" expected \"" + existing.displayName + "\"");
+				me.removeAccessory(existing, device.id);
+				me.addAccessory(device);
+				me.log("Accessory removed & re-added!");
 			}
-		}
-
-		// Check existing accessories exist in sengled devices
-		if (devices) {
-			for (let index in me.accessories) {
-				let found = devices.find((device) => {
-					return device.id.includes(index);
-				});
-
-				let accessory = me.accessories[index];
-
-				if (!found) {
-					me.log("Previously configured accessory not found, removing", index);
-					me.removeAccessory(accessory);
-				} else if (found.name != accessory.context.name) {
-					me.log("Accessory name does not match device name, got " + found.name + " expected " + accessory.context.name);
-					me.removeAccessory(accessory);
-					me.addAccessory(found);
-					me.log("Accessory removed & re-added!");
-				}
+			else {
+				if (me.debug) me.log("Updating existing device: ", device.id, deviceName);
+				this.bindAndUpdateAccessory(existing, device);
 			}
-		}
+		});
+
+		// Find all registered accessories that are not in the sengled devices list
+		let missingAccessoryKeys = Object.keys(me.accessories).filter(
+			index => !devices.some(device => device.id == index));
+
+		// Remove all accessories that are not reported by the Sengled API.
+		missingAccessoryKeys.forEach(accessoryKey => {
+				me.log("Previously configured accessory not found, removing", accessoryKey);
+				me.removeAccessory(me.accessories[accessoryKey], accessoryKey);
+		});
 
 		if (me.debug) me.log("Discovery complete");
-		// if (me.debug) me.log(JSON.stringify(me.accessories, null, 4));
+		if (me.debug) me.log(me.accessories);
 	}).catch((err) => {
 		this.log("Failed deviceDiscovery: ");
 		this.log(me.debug ? err : err.message);
@@ -145,7 +151,7 @@ SengledHubPlatform.prototype.addAccessory = function(data) {
 
 	let uuid = UUIDGen.generate(data.id);
 
-	let displayName = !(data.name) ? data.id : data.name;
+	let displayName = GetDeviceName(data);
 	// 5 == Accessory.Categories.LIGHTBULB
 	// 8 == Accessory.Categories.SWITCH
 	let newAccessory = new Accessory(displayName, uuid, 5);
@@ -193,7 +199,7 @@ SengledHubPlatform.prototype.removeAccessory = function(accessory, accessoryId =
 // Bind callbacks for light properties and update context data.
 SengledHubPlatform.prototype.bindAndUpdateAccessory = function(accessory, data) {
 	let me = this;
-	if (me.debug) me.log("setService invoked: ");
+	if (me.debug) me.log("bindAndUpdateAccessory invoked: ");
 	if (me.debug) me.log(accessory);
 
 	// Update context data for accessory.
@@ -278,7 +284,7 @@ class SengledLightAccessory {
 
 SengledLightAccessory.prototype.InititializeState = function() {
 	let me = this;
-	if (me.debug) me.log("InitializeState invoked: " + this.accessory + " " + this.context);
+	if (me.debug) me.log("InitializeState invoked: " + JSON.stringify(this.context, null, 4));
 
 	// Set accessory information
 	let info = me.accessory.getService(Service.AccessoryInformation);
