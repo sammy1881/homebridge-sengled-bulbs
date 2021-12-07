@@ -136,7 +136,6 @@ SengledHubPlatform.prototype.deviceDiscovery = function() {
 	}).catch((err) => {
 		this.log("Failed deviceDiscovery: ");
 		this.log(me.debug ? err : err.message);
->>>>>>> Logins are currently timing out via the existing method, but this seems to work with a higher timout.
 	});
 };
 
