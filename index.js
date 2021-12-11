@@ -22,13 +22,15 @@ function SengledHubPlatform(log, config, api) {
 	this.info = config['info'] || true;
 	this.username = config['username'];
 	this.password = config['password'];
+	this.useAlternateLoginApi = config['AlternateLoginApi'];
+	this.timeout = config['Timeout'];
 
 	if (api) {
 		this.api = api;
 		this.api.on('didFinishLaunching', this.didFinishLaunching.bind(this));
 	}
 
-	this.client = new ElementHomeClient(log, this.debug, this.info);
+	this.client = new ElementHomeClient(this.useAlternateLoginApi, this.timeout, log, this.debug, this.info);
 }
 
 SengledHubPlatform.prototype.configureAccessory = function(accessory) {
@@ -42,27 +44,26 @@ SengledHubPlatform.prototype.configureAccessory = function(accessory) {
 	if (this.accessories[accessoryId]) {
 		this.log("Duplicate accessory detected, removing existing if possible, otherwise removing this accessory", accessoryId);
 		try {
-			this.removeAccessory(this.accessories[accessoryId].accessory, accessoryId);
-			var sengledAccessory = this.setService(accessory);
+			this.removeAccessory(this.accessories[accessoryId], accessoryId);
+			this.accessories[accessoryId] = accessory;
+
 		} catch (error) {
 			this.removeAccessory(accessory, accessoryId);
-			var sengledAccessory = this.accessories[accessoryId];
 		}
-	} else {
-		var sengledAccessory = this.setService(accessory);
 	}
-
-	this.accessories[accessoryId] = sengledAccessory;
+	else {
+		this.accessories[accessoryId] = accessory;
+	}
 };
 
 SengledHubPlatform.prototype.didFinishLaunching = function() {
 	let me = this;
 	if (me.debug) me.log("didFinishLaunching invoked ");
-	// if (me.debug) me.log(JSON.stringify(me.accessories, null, 4));
+	if (me.debug) me.log(me.accessories);
 
 	// // dev-mode
 	// for (let index in me.accessories) {
-	// 	me.removeAccessory(me.accessories[index].accessory);
+	// 	me.removeAccessory(me.accessories[index]);
 	// }
 
 	this.deviceDiscovery();
@@ -83,6 +84,11 @@ function UpdateContextFromDevice(context, device) {
 	context.model = (device.productCode != null) ? device.productCode : "Sengled Hub";
 }
 
+// Use to consistently fall back to id if name is not defined.
+function GetDeviceName(device) {
+	return !(device.name) ? device.id : device.name;
+}
+
 SengledHubPlatform.prototype.deviceDiscovery = function() {
 	let me = this;
 	if (me.debug) me.log("deviceDiscovery invoked");
@@ -91,41 +97,45 @@ SengledHubPlatform.prototype.deviceDiscovery = function() {
 		return this.client.getDevices();
 	}).then(devices => {
 		if (me.debug) me.log("Adding discovered devices");
-		for (let i in devices) {
-			let existing = me.accessories[devices[i].id];
+
+		// Accessory Registration.  For each device reported by the Sengled API:
+		// - Add the accessory if it has not already added.
+		// - If the Sengled API reports an updated name, remove and re-create the device.
+		// - Otherwise, bind callbacks and update the context sstate.
+		devices.forEach((device) => {
+			let existing = me.accessories[device.id];
+			let deviceName = GetDeviceName(device);
 
 			if (!existing) {
-				me.log("Adding device: ", devices[i].id, devices[i].name);
-				me.addAccessory(devices[i]);
-			} else {
-				UpdateContextFromDevice(existing.context, devices[i]);
-
-				if (me.debug) me.log("Skipping existing device", i);
+				me.log("Adding device: ", device.id, deviceName);
+				me.addAccessory(device);
+			} else if (deviceName != existing.displayName) {
+				me.log("Accessory name does not match device name, got \"" + deviceName + "\" expected \"" + existing.displayName + "\"");
+				me.removeAccessory(existing, device.id);
+				me.addAccessory(device);
+				me.log("Accessory removed & re-added!");
 			}
-		}
-
-		// Check existing accessories exist in sengled devices
-		if (devices) {
-			for (let index in me.accessories) {
-				let acc = me.accessories[index];
-				acc.getState();
-				let found = devices.find((device) => {
-					return device.id.includes(index);
-				});
-				if (!found) {
-					me.log("Previously configured accessory not found, removing", index);
-					me.removeAccessory(me.accessories[index].accessory);
-				} else if (found.name != acc.context.name) {
-					me.log("Accessory name does not match device name, got " + found.name + " expected " + acc.context.name);
-					me.removeAccessory(me.accessories[index].accessory);
-					me.addAccessory(found);
-					me.log("Accessory removed & readded!");
-				}
+			else {
+				if (me.debug) me.log("Updating existing device: ", device.id, deviceName);
+				this.bindAndUpdateAccessory(existing, device);
 			}
-		}
+		});
+
+		// Find all registered accessories that are not in the sengled devices list
+		let missingAccessoryKeys = Object.keys(me.accessories).filter(
+			index => !devices.some(device => device.id == index));
+
+		// Remove all accessories that are not reported by the Sengled API.
+		missingAccessoryKeys.forEach(accessoryKey => {
+				me.log("Previously configured accessory not found, removing", accessoryKey);
+				me.removeAccessory(me.accessories[accessoryKey], accessoryKey);
+		});
 
 		if (me.debug) me.log("Discovery complete");
-		// if (me.debug) me.log(JSON.stringify(me.accessories, null, 4));
+		if (me.debug) me.log(me.accessories);
+	}).catch((err) => {
+		this.log("Failed deviceDiscovery: ");
+		this.log(me.debug ? err : err.message);
 	});
 };
 
@@ -134,28 +144,25 @@ SengledHubPlatform.prototype.addAccessory = function(data) {
 	if (me.debug) me.log("addAccessory invoked: ");
 	if (me.debug) me.log(data);
 
-	if (!this.accessories[data.id]) {
-		let uuid = UUIDGen.generate(data.id);
+	if (this.accessories[data.id]) {
+		throw new Error("addAccessory invoked for an existing accessory: " + data.id );
+	}
 
-		let displayName = !(data.name) ? data.id : data.name;
-		// 5 == Accessory.Categories.LIGHTBULB
-		// 8 == Accessory.Categories.SWITCH
-		let newAccessory = new Accessory(displayName, uuid, 5);
-		UpdateContextFromDevice(newAccessory.context, data);
+	let uuid = UUIDGen.generate(data.id);
 
-		var sengledAccessory = this.setService(newAccessory);
+	let displayName = GetDeviceName(data);
+	// 5 == Accessory.Categories.LIGHTBULB
+	// 8 == Accessory.Categories.SWITCH
+	let newAccessory = new Accessory(displayName, uuid, 5);
 
-        	this.api.registerPlatformAccessories(
-			'homebridge-sengled-bulbs',
-			'SengledHub',
-			[newAccessory]
-        );
-    } else {
-	var sengledAccessory = this.accessories[data.id];
-	sengledAccessory.getInitState();
-    }
+	this.bindAndUpdateAccessory(newAccessory, data);
 
-    this.accessories[data.id] = sengledAccessory;
+	this.api.registerPlatformAccessories(
+		'homebridge-sengled-bulbs',
+		'SengledHub',
+		[newAccessory]);
+
+	this.accessories[data.id] = newAccessory;
 };
 
 /**
@@ -188,11 +195,17 @@ SengledHubPlatform.prototype.removeAccessory = function(accessory, accessoryId =
 	}
 };
 
-SengledHubPlatform.prototype.setService = function(accessory) {
+// Bind callbacks for light properties and update context data.
+SengledHubPlatform.prototype.bindAndUpdateAccessory = function(accessory, data) {
 	let me = this;
-	if (me.debug) me.log("setService invoked: ");
+	if (me.debug) me.log("bindAndUpdateAccessory invoked: ");
 	if (me.debug) me.log(accessory);
 
+	// Update context data for accessory.
+	UpdateContextFromDevice(accessory.context, data);
+
+	// Create the accessory wrapper to bind callbacks, track property changes,
+	// and update homebridge property values.
 	return new SengledLightAccessory(me, accessory, me.debug);
 };
 
@@ -261,17 +274,18 @@ class SengledLightAccessory {
 
 		this.accessory.on('identify', this.identify.bind(this));
 
-		this.getInitState();
+		this.InititializeState();
 	}
 
 	getName() { return this.context.name; }
 	getId() { return this.context.id; }
 };
 
-SengledLightAccessory.prototype.getInitState = function() {
+SengledLightAccessory.prototype.InititializeState = function() {
 	let me = this;
-	if (me.debug) me.log("getInitState invoked: " + this.accessory + " " + this.context);
+	if (me.debug) me.log("InitializeState invoked: " + JSON.stringify(this.context, null, 4));
 
+	// Set accessory information
 	let info = me.accessory.getService(Service.AccessoryInformation);
 
 	info.setCharacteristic(Characteristic.Manufacturer, me.context.manufacturer);
@@ -282,31 +296,33 @@ SengledLightAccessory.prototype.getInitState = function() {
 		info.setCharacteristic(Characteristic.FirmwareRevision, me.context.firmwareVersion);
 	}
 
-	this.getState();
-};
+	// Update homebridge to the latest state from sengled API.
 
-SengledLightAccessory.prototype.getState = function() {
-	let me = this;
-	if (me.debug) me.log("getState invoked: " + this.accessory);
-
-	me.lightbulbService.getCharacteristic(Characteristic.On).getValue();
+	me.lightbulbService.getCharacteristic(Characteristic.On).updateValue(this.context.status);
 
 	if (me.brightness.supportsBrightness())
 	{
-		me.lightbulbService.getCharacteristic(Characteristic.Brightness).getValue();
+		me.lightbulbService
+			.getCharacteristic(Characteristic.Brightness)
+			.updateValue(this.brightness.getValue());
 	}
 
 	if (me.color.supportsColorTemperature())
 	{
 		me.lightbulbService
 			.getCharacteristic(Characteristic.ColorTemperature)
-			.getValue();
+			.updateValue(this.color.getColorTemperature());
 	}
 
 	if (me.color.supportsRgb())
 	{
-		me.lightbulbService.getCharacteristic(Characteristic.Hue).getValue();
-		me.lightbulbService.getCharacteristic(Characteristic.Saturation).getValue();
+		me.lightbulbService
+			.getCharacteristic(Characteristic.Hue)
+			.updateValue(this.color.getHue());
+
+		me.lightbulbService
+			.getCharacteristic(Characteristic.Saturation)
+			.updateValue(this.color.getSaturation());
 	}
 };
 
@@ -330,26 +346,7 @@ SengledLightAccessory.prototype.getPowerState = function(callback) {
 	let me = this;
 	if (this.debug) this.log("Getting device PowerState: " + this.getName() + " status");
 
-	return this.client.login(this.username, this.password).then(() => {
-		return this.client.getDevices();
-	}).then(devices => {
-		return devices.find((device) => {
-			return device.id.includes(this.getId());
-		});
-	}).then((device) => {
-		if (typeof device === 'undefined') {
-			if (this.debug) this.log("Removing undefined device", this.getName());
-			this.platform.removeAccessory(this.accessory);
-		} else {
-			if (this.debug) this.log("getPowerState complete: " + device.name + " " + this.getName() + " is " + device.status);
-			this.context.status = device.status;
-			callback(null, device.status);
-		}
-	}).catch((err) => {
-		this.log("Failed to get power state");
-		this.log(err.message);
-		callback(err);
-	});
+	callback(null, this.context.status);
 };
 
 SengledLightAccessory.prototype.setBrightness = function(brightness, callback) {
