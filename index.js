@@ -334,7 +334,7 @@ SengledLightAccessory.prototype.setPowerState = function(powerState, callback) {
 		return this.client.deviceSetOnOff(this.getId(), powerState);
 	}).then(() => {
 		this.context.status = powerState;
-		callback(null, powerState);
+		callback();
 	}).catch((err) => {
 		this.log("Failed to set power state to", powerState);
 		this.log(err);
