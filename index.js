@@ -59,11 +59,10 @@ SengledHubPlatform.prototype.configureAccessory = function(accessory) {
 SengledHubPlatform.prototype.didFinishLaunching = function() {
 	let me = this;
 	if (me.debug) me.log("didFinishLaunching invoked ");
-	if (me.debug) me.log(me.accessories);
 
 	// // dev-mode
 	// for (let index in me.accessories) {
-	// 	me.removeAccessory(me.accessories[index]);
+	// 	me.removeAccessory(me.accessories[index].accessory);
 	// }
 
 	this.deviceDiscovery();
@@ -132,7 +131,7 @@ SengledHubPlatform.prototype.deviceDiscovery = function() {
 		});
 
 		if (me.debug) me.log("Discovery complete");
-		if (me.debug) me.log(me.accessories);
+		if (me.debug) for(let key in me.accessories) {me.log(me.accessories[key].accessory);}
 	}).catch((err) => {
 		this.log("Failed deviceDiscovery: ");
 		this.log(me.debug ? err : err.message);
@@ -282,8 +281,7 @@ SengledLightAccessory.prototype.BindService = function() {
 // Bind callbacks for light properties and update context data.
 SengledLightAccessory.prototype.BindAndUpdateAccessory = function(data) {
 	let me = this;
-	if (me.debug) me.log("BindAndUpdateAccessory invoked: ");
-	if (me.debug) me.log(accessory);
+	if (me.debug) me.log("BindAndUpdateAccessory invoked: " + this.accessory.displayName);
 
 	// Update context data for accessory.
 	UpdateContextFromDevice(this.accessory.context, data);
