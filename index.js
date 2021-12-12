@@ -374,10 +374,13 @@ SengledLightAccessory.prototype.getBrightness = function(callback) {
 
 SengledLightAccessory.prototype.setColorTemperature = function(colortemperature, callback) {
 	let me = this;
-	if (me.debug) me.log("++++ setColortemperature: " + me.context.name + " status colortemperature to " + colortemperature);
-	let sengledColorTemperature = colortemperature || this.color.getMinColorTemperature();
-	sengledColorTemperature = Color.MiredsToSengledColorTemperature(sengledColorTemperature, this.color.getConfigData());
-	if (me.debug) me.log("++++ Sending device: " + this.getName() + " status colortemperature to " + colortemperature);
+	if (me.debug) me.log("++++ setColortemperature: " + me.getName() + " status colortemperature to " + colortemperature);
+
+	// Convert to sengleded color temperature range
+	colortemperature = colortemperature || this.color.getMinColorTemperature();
+	let sengledColorTemperature = Color.MiredsToSengledColorTemperature(colortemperature, this.color.getConfigData());
+
+	if (me.debug) me.log("++++ Sending device: " + this.getName() + " status colortemperature to " + sengledColorTemperature);
 
 	return this.client.login(this.username, this.password).then(() => {
 		return this.client.deviceSetColorTemperature(this.getId(), sengledColorTemperature);
@@ -416,7 +419,7 @@ SengledLightAccessory.prototype.setHue = function(hue, callback) {
 };
 
 SengledLightAccessory.prototype.getHue = function(callback) {
-	if (this.debug) this.log("+++getHue: " + this.name + "  hue: " + this.color.getHue());
+	if (this.debug) this.log("+++getHue: " + this.getName() + "  hue: " + this.color.getHue());
 
 	callback(null, this.color.getHue());
 };
