@@ -22,8 +22,8 @@ function SengledHubPlatform(log, config, api) {
 	this.info = config['info'] || true;
 	this.username = config['username'];
 	this.password = config['password'];
-	this.useAlternateLoginApi = config['AlternateLoginApi'];
-	this.timeout = config['Timeout'];
+	this.useAlternateLoginApi = config['AlternateLoginApi'] ?  config['AlternateLoginApi'] : false;
+	this.timeout = config['Timeout'] ? config['Timeout'] : 4000;
 
 	if (api) {
 		this.api = api;
