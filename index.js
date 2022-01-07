@@ -1,15 +1,16 @@
 'use strict';
 
 const {ElementHomeClient, Brightness} = require('./lib/client');
-const {RgbColor, ColorContextData, Color} = require('./lib/color');
-let Accessory, Service, Characteristic, UUIDGen;
+const {RgbColor, ColorContextData, Color, ColorModeColorTemperature, ColorModeRgb} = require('./lib/color');
+let Accessory, Service, Characteristic, UUIDGen, AdaptiveLightingController, AdaptiveLightingControllerMode;
 
 module.exports = function(homebridge) {
 	Accessory = homebridge.platformAccessory;
 	Service = homebridge.hap.Service;
 	Characteristic = homebridge.hap.Characteristic;
 	UUIDGen = homebridge.hap.uuid;
-
+	AdaptiveLightingController = homebridge.hap.AdaptiveLightingController;
+        AdaptiveLightingControllerMode = homebridge.hap.AdaptiveLightingControllerMode;
 	homebridge.registerPlatform("homebridge-sengled-bulbs", "SengledHub", SengledHubPlatform);
 };
 
@@ -20,17 +21,21 @@ function SengledHubPlatform(log, config, api) {
 	this.cache_timeout = 60; // seconds
 	this.debug = config['debug'] || false;
 	this.info = config['info'] || true;
-	this.username = config['username'];
-	this.password = config['password'];
-	this.useAlternateLoginApi = config['AlternateLoginApi'] ?  config['AlternateLoginApi'] : false;
-	this.timeout = config['Timeout'] ? config['Timeout'] : 4000;
+	let username = config['username'];
+	let password = config['password'];
+	this.useAlternateLoginApi = config['AlternateLoginApi'] != undefined ? config['AlternateLoginApi'] : false;
+	this.timeout = config['Timeout'] != undefined ? config['Timeout'] : 4000;
+	this.enableAdaptiveLighting = config['EnableAdaptiveLighting'] != undefined ? config['EnableAdaptiveLighting'] : false;
+	this.customTemperatureAdjustment = config['CustomTemperatureAdjustment'] != undefined ? config['CustomTemperatureAdjustment'] : 0;
+
+	if (this.debug) this.log("config: \n%s", config);
 
 	if (api) {
 		this.api = api;
 		this.api.on('didFinishLaunching', this.didFinishLaunching.bind(this));
 	}
 
-	this.client = new ElementHomeClient(this.useAlternateLoginApi, this.timeout, log, this.debug, this.info);
+	this.client = new ElementHomeClient(username, password, this.useAlternateLoginApi, this.timeout, log, this.debug, this.info);
 }
 
 SengledHubPlatform.prototype.configureAccessory = function(accessory) {
@@ -113,9 +118,8 @@ SengledHubPlatform.prototype.deviceDiscovery = function() {
 				me.removeAccessory(existing.accessory, device.id);
 				me.addAccessory(device);
 				me.log("Accessory removed & re-added!");
-			}
-			else {
-				me.log("Updating existing device: ", device.id, deviceName);
+			} else {
+				if (me.debug) me.log("Updating existing device: ", device.id, deviceName);
 				existing.BindAndUpdateAccessory(device);
 			}
 		});
@@ -133,8 +137,7 @@ SengledHubPlatform.prototype.deviceDiscovery = function() {
 		if (me.debug) me.log("Discovery complete");
 		if (me.debug) for(let key in me.accessories) {me.log(me.accessories[key].accessory);}
 	}).catch((err) => {
-		this.log("Failed deviceDiscovery: ");
-		this.log(me.debug ? err : err.message);
+		this.log("Failed deviceDiscovery: \n%s", err);
 	});
 };
 
@@ -208,10 +211,30 @@ class SengledLightAccessory {
 		this.password = platform.password;
 		this.client = platform.client;
 		this.platform = platform;
+
+		// Indicates if there are locally cached values that have not been pushed to the Sengled API.
+		this.hasCachedBrightness = false;
+		this.hasCachedColor = false;
 	}
 
 	getName() { return this.context.name; }
 	getId() { return this.context.id; }
+
+	isAdaptiveLightingEnabled() {
+		return this.adaptiveLightingController && this.adaptiveLightingController.isAdaptiveLightingActive();
+	}
+
+	// Indicate if set event handlers for color temperature, hue, and saturation should cache their values
+	// instead of posting them to the Sengled API.  Cache whenever adaptive lighting is on and the light
+	// is off to reduce traffic to the Sengled servers.
+	cacheColorSets() { return this.isAdaptiveLightingEnabled() && !this.context.status; }
+
+	// Drop color sets to the same value in the accessory context when adaptive lighting is disabled.
+	// Only do this for adaptive lighting because the user or automation may set values outside of
+	// this plugin, such as via Sengled app manual sets or automated routines.
+	isRedundantColorSetCheckEnabled() {
+		return this.isAdaptiveLightingEnabled();
+	}
 };
 
 SengledLightAccessory.prototype.BindService = function() {
@@ -229,7 +252,7 @@ SengledLightAccessory.prototype.BindService = function() {
 			.on('set', this.setPowerState.bind(this))
 			.on('get', this.getPowerState.bind(this));
 
-		// If brightness is supported, bind for brightness 
+		// If brightness is supported, bind for brightness
 		if (this.brightness.supportsBrightness())
 		{
 			lightbulbService.getCharacteristic(Characteristic.Brightness)
@@ -249,20 +272,19 @@ SengledLightAccessory.prototype.BindService = function() {
 		// setting hue or saturation as switching to color mode. Seems to work even if that's not the intended use.
 
 		// If color temperature is supported, bind for ColorTemperature characteristic
-		if (this.color.supportsColorTemperature())
-		{
+		if (this.color.supportsColorTemperature()) {
+
 			lightbulbService.getCharacteristic(Characteristic.ColorTemperature)
 				.setProps({
 					minValue: this.color.getMinColorTemperature(),
-					maxValue: this.color.getMaxColorTemperature()
-			})
-			.on('set', this.setColorTemperature.bind(this))
-			.on('get', this.getColorTemperature.bind(this));
+					maxValue: this.color.getMaxColorTemperature()})
+				.on('set', this.setColorTemperature.bind(this))
+				.on('get', this.getColorTemperature.bind(this));
 		}
 
 		// if the light supports color, bind for hue and saturation.
-		if (this.color.supportsRgb())
-		{
+		if (this.color.supportsRgb()) {
+
 			lightbulbService.getCharacteristic(Characteristic.Hue)
 				.on('set', this.setHue.bind(this))
 				.on('get', this.getHue.bind(this));
@@ -270,6 +292,22 @@ SengledLightAccessory.prototype.BindService = function() {
 			lightbulbService.getCharacteristic(Characteristic.Saturation)
 				.on('set', this.setSaturation.bind(this))
 				.on('get', this.getSaturation.bind(this));
+		}
+
+		// Check the config to determine if adaptive lighting is enabled.  If so, add the Adaptive Lighting Controller in 'Auto'
+		// mode to every light that supports at least brightness and color temperature.
+		if (this.platform.enableAdaptiveLighting && this.brightness.supportsBrightness() && this.color.supportsColorTemperature()) {
+
+			const options = {
+				controllerMode: AdaptiveLightingControllerMode.AUTOMATIC,
+				customTemperatureAdjustment: this.platform.customTemperatureAdjustment
+			};
+
+			if (this.debug) this.log("Adding adaptive lighting controller to %s with options: %s", this.getName(), options);
+
+			let adaptiveLightingController = new AdaptiveLightingController(lightbulbService, options);
+			this.accessory.configureController(adaptiveLightingController);
+			this.adaptiveLightingController = adaptiveLightingController;
 		}
 
 		this.accessory.on('identify', this.identify.bind(this));
@@ -313,22 +351,22 @@ SengledLightAccessory.prototype.InititializeState = function() {
 
 	me.lightbulbService.getCharacteristic(Characteristic.On).updateValue(this.context.status);
 
-	if (me.brightness.supportsBrightness())
-	{
+	if (me.brightness.supportsBrightness()) {
+
 		me.lightbulbService
 			.getCharacteristic(Characteristic.Brightness)
 			.updateValue(this.brightness.getValue());
 	}
 
-	if (me.color.supportsColorTemperature())
-	{
+	if (me.color.supportsColorTemperature()) {
+
 		me.lightbulbService
 			.getCharacteristic(Characteristic.ColorTemperature)
 			.updateValue(this.color.getColorTemperature());
 	}
 
-	if (me.color.supportsRgb())
-	{
+	if (me.color.supportsRgb()) {
+
 		me.lightbulbService
 			.getCharacteristic(Characteristic.Hue)
 			.updateValue(this.color.getHue());
@@ -344,13 +382,41 @@ SengledLightAccessory.prototype.setPowerState = function(powerState, callback) {
 	if (this.debug) this.log("++++ Sending device: " + this.getId() + " status change to " + powerState);
 
 	return this.client.login(this.username, this.password).then(() => {
+		// If the light is being turned on, check if cached color values must be flushed.
+		if (powerState && this.hasCachedColor) {
+
+			// Function to set that the color has been flushed.
+			let setComplete = () => { this.hasCachedColor = false; };
+
+			// Check the color mode to flush
+			if (this.color.getColorMode() == ColorModeColorTemperature) {
+
+				let colorTemperature = this.color.getColorTemperature();
+				let sengledColorTemperature = Color.MiredsToSengledColorTemperature(colorTemperature, this.color.getConfigData());
+
+				if (this.debug) this.log("Flushing cached color temperature setting: %d.", colorTemperature);
+
+				return this.client.deviceSetColorTemperature(this.getId(), sengledColorTemperature).then(setComplete);
+			} else {
+
+				let normalizedRgb = this.color.getRgb();
+				let rgbColor = Color.NormalizedRgbToSengledRgb(normalizedRgb);
+
+				if (this.debug) this.log("Flushing cached color rgb temperature setting: %s.", rgbColor);
+
+				return this.client.deviceSetRgbColor(this.getId(), rgbColor).then(setComplete);
+			}
+		}
+
+	}).then(() => {
+		// Set the device power state.
 		return this.client.deviceSetOnOff(this.getId(), powerState);
 	}).then(() => {
+		// Update context data to reflect new state.
 		this.context.status = powerState;
 		callback();
 	}).catch((err) => {
-		this.log("Failed to set power state to", powerState);
-		this.log(err);
+		this.log("Failed to set power state to %s.\n%s", powerState, err);
 		callback(err);
 	});
 };
@@ -374,8 +440,7 @@ SengledLightAccessory.prototype.setBrightness = function(brightness, callback) {
 		this.brightness.setValue(brightness);
 		callback();
 	}).catch((err) => {
-		this.log("Failed to set brightness to", brightness);
-		this.log(err);
+		this.log("Failed to set brightness to %s.\n%s", brightness, err);
 		callback(err);
 	});
 };
@@ -385,34 +450,69 @@ SengledLightAccessory.prototype.getBrightness = function(callback) {
         callback( null, this.brightness.getValue());
 };
 
-SengledLightAccessory.prototype.setColorTemperature = function(colortemperature, callback) {
+// Stores colorTemperature in context data and updats hue/saturation if supported.
+SengledLightAccessory.prototype.updateColorTemperature = function(colorTemperature) {
+
+	// Set the new color tempreature to the context.  This also updates hue and saturation context values.
+	this.color.setColorTemperature(colorTemperature);
+
+	if (this.color.supportsRgb()) {
+		// The light is now in "white light" mode.  Update hue and saturation to homekit.  This makes the
+		// color temperature circle in the color temperature setting match-ish color temperature (warm blue
+		// to cool orange-ish).
+
+		this.lightbulbService.getCharacteristic(Characteristic.Hue).updateValue(this.color.getHue());
+		this.lightbulbService.getCharacteristic(Characteristic.Saturation).updateValue(this.color.getSaturation());
+	}
+};
+
+SengledLightAccessory.prototype.setColorTemperature = function(colorTemperature, callback) {
 	let me = this;
-	if (me.debug) me.log("++++ setColortemperature: " + me.getName() + " status colortemperature to " + colortemperature);
+	if (me.debug) me.log("++++ setColortemperature: " + me.getName() + " status colorTemperature to " + colorTemperature);
 
 	// Convert to sengleded color temperature range
-	colortemperature = colortemperature || this.color.getMinColorTemperature();
-	let sengledColorTemperature = Color.MiredsToSengledColorTemperature(colortemperature, this.color.getConfigData());
-	if (me.debug) me.log("++++ Sending device: " + this.getName() + " status colortemperature to " + sengledColorTemperature);
+	colorTemperature = colorTemperature || this.color.getMinColorTemperature();
+	let sengledColorTemperature = Color.MiredsToSengledColorTemperature(colorTemperature, this.color.getConfigData());
+
+	// Check if we are already in color temperature mode.
+	if (this.isRedundantColorSetCheckEnabled() && this.color.getColorMode() == ColorModeColorTemperature) {
+
+		// Determine the old value scaled to the sengled device range.
+		let oldSengledColorTemperature = Color.MiredsToSengledColorTemperature(this.color.getColorTemperature(), this.color.getConfigData());
+
+		// The mired range is larger than the sengled encoding range,
+		// so early out if the light is already at the specified light temperature.
+		if (sengledColorTemperature == oldSengledColorTemperature) {
+			if (me.debug) me.log("++++ setColorTemperature: Skipping set, value %d already set on device.", sengledColorTemperature);
+			this.updateColorTemperature(colorTemperature);
+			return callback();
+		}
+	}
+
+	// Check if the color temperature set should be cached and flushed later.
+	if (me.cacheColorSets()) {
+
+		if (me.debug) me.log("++++ setColorTemperature: Caching set, value will be flushed later.");
+
+		this.updateColorTemperature(colorTemperature);
+		this.hasCachedColor = true;
+
+		return callback();
+	}
+
+	if (me.debug) me.log("++++ Sending device: " + this.getName() + " status colorTemperature to " + sengledColorTemperature);
 
 	return this.client.login(this.username, this.password).then(() => {
 		return this.client.deviceSetColorTemperature(this.getId(), sengledColorTemperature);
 	}).then(() => {
-		// Set the new color tempreature to the context.  This also updates hue and saturation.
-		this.color.setColorTemperature(colortemperature);
+		// Color setting has been flushed.
+		this.hasCachedColor = false;
 
-		if (this.color.supportsRgb())
-		{
-			// The light is now in "white light" mode.  Update hue and saturation to homekit.  This makes the
-			// color temperature circle in the color temperature setting match-ish color temperature (warm blue
-			// to cool orange-ish).
-
-			this.lightbulbService.getCharacteristic(Characteristic.Hue).updateValue(this.color.getHue());
-			this.lightbulbService.getCharacteristic(Characteristic.Saturation).updateValue(this.color.getSaturation());
-		}
+		// Update context data.
+		this.updateColorTemperature(colorTemperature);
 		callback();
 	}).catch((err) => {
-		this.log("Failed to set colortemperature to " + colortemperature);
-		this.log(err);
+		this.log("Failed to set colorTemperature to %s.\n%s",  colorTemperature, err);
 		callback(err);
 	});
 };
@@ -424,7 +524,22 @@ SengledLightAccessory.prototype.getColorTemperature = function(callback) {
 
 SengledLightAccessory.prototype.setHue = function(hue, callback) {
 	if (this.debug) this.log("+++setHue: " + this.getName() + " status hue to " + hue);
+
+	// Check if we are already in rgb mode.
+	if (this.isRedundantColorSetCheckEnabled() && this.color.getColorMode() == ColorModeRgb) {
+
+		// Do not set if the value is already up to date.
+		if (hue == this.color.getHue()) {
+			return callback();
+		}
+	}
+
 	this.color.setHue(hue);
+
+	// Check if the hue set should be cached and flushed later.
+	if (this.cacheColorSets()) {
+		this.hasCachedColor = true;
+	}
 
 	// setSaturation is always called after setHue, so avoid updating the rgb twice and update in setSaturation
 	callback();
@@ -438,6 +553,21 @@ SengledLightAccessory.prototype.getHue = function(callback) {
 
 SengledLightAccessory.prototype.setSaturation = function(saturation, callback) {
 	if (this.debug) this.log("+++setSaturation: " + this.getName() + " status saturation to " + saturation);
+
+	// Check if we are already in rgb mode.
+	if (this.isRedundantColorSetCheckEnabled() && this.color.getColorMode() == ColorModeRgb) {
+
+		// Do not set if the value is already up to date.
+		if (saturation == this.color.getSaturation()) {
+			return callback();
+		}
+	}
+
+	if (this.cacheColorSets()) {
+		this.color.setSaturation(saturation);
+		this.hasCachedColor = true;
+		return callback();
+	}
 
 	// Backup color data in the event of failure.
 	let oldColorData = this.color.copyData();
@@ -454,7 +584,12 @@ SengledLightAccessory.prototype.setSaturation = function(saturation, callback) {
 		return this.client.deviceSetRgbColor(this.getId(), rgbColor);
 	}).then(() => {
 
+		// Color setting has been flushed.
+		this.hasCachedColor = false;
+
 		// The light is now in "color light" mode.
+		// With deviceSetRgbColor complete, do not restore oldColorData on further errors.
+		oldColorData = undefined;
 
 		// The sengled API for setting RGB turns on the light.  Ideally, this would behave like color temp, but
 		// but update to reflect light state for now.
@@ -463,9 +598,13 @@ SengledLightAccessory.prototype.setSaturation = function(saturation, callback) {
 
 		callback();
 	}).catch((err) => {
-		this.log("Failed to set rgb color to ", this.color.getRgb());
-		this.color.assignData(oldColorData); // restore color state.
-		this.log(err);
+		this.log("Failed to set rgb color to %s.\n%s", this.color.getRgb(), err);
+
+		// restore color state.
+		if (oldColorData != undefined) {
+			this.color.assignData(oldColorData);
+		}
+
 		callback(err);
 	});
 };
@@ -481,4 +620,3 @@ SengledLightAccessory.prototype.identify = function(paired, callback) {
 	if (me.debug) me.log("identify invoked: " + this.context + " " + paired);
 	callback();
 };
-
