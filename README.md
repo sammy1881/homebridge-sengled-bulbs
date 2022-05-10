@@ -38,6 +38,10 @@ Configuration sample:
 ## Optional parameters
 
 - debug, this will enable more logging information from the plugin
+- Timeout, The timeout in milliseconds to use for calls to the Sengled Web API. High values may result in other errors.
+- AlternateLoginApi, Uses an alternative login API if for some reason logins fail even with increased timeout.
+- EnableAdaptiveLighting, Experimental. Enables adaptive lighting for each light that supports brightness and color temperature.
+- CustomTemperatureAdjustment, Offsets the color temperature used by adaptive lighting by a fixed amount. Adjust the value larger for warmer light.
 
 ```
 "platforms": [
@@ -46,7 +50,12 @@ Configuration sample:
     "name": "SengledHub",
     "username": "***",
     "password": "***",
-    "debug": true
+    "debug": true,
+    "Info": false,
+    "Timeout": 4000,
+    "AlternateLoginApi": true,
+    "EnableAdaptiveLighting": true,
+    "CustomTemperatureAdjustment": 0
   }
 ]
 ```

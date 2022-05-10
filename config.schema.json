@@ -52,7 +52,67 @@
                 "type": "boolean",
                 "default": false,
                 "description": "Uses an alternative login API if for some reason logins fail even with increased timeout."
+            },
+            "EnableAdaptiveLighting": {
+                "title": "EnableAdaptiveLighting",
+                "type": "boolean",
+                "default": false,
+                "description": "Experimental.  Enables adaptive lighting for each light that supports brightness and color temperature."
+            },
+            "CustomTemperatureAdjustment": {
+                "title": "TemperatureAdjustment (Mireds)",
+                "type": "integer",
+                "condition": {
+                    "functionBody": "return model.EnableAdaptiveLighting === true;"
+                },
+                "default": 0,
+                "minimum": -50,
+                "maximum": 100,
+                "description": "Offsets the color temperature used by adaptive lighting by a fixed amount.  Adjust the value larger for warmer light."
             }
         }
-    }
+    },
+    "layout": [
+        "name",
+        {
+            "key": "Credentials",
+            "title": "Sengled Credentials",
+            "type": "section",
+            "items": [
+                "username",
+                "password"
+            ]
+        },
+        {
+            "key": "Logging",
+            "title": "Logging Settings",
+            "type": "section",
+            "items": [
+                "debug",
+                "Info"
+            ]
+        },
+        {
+            "key": "Advanced",
+            "title": "Advanced Features",
+            "type": "section",
+            "expandable": true,
+            "expanded": false,
+            "items": [
+                 "Timeout",
+                 "AlternateLoginApi"
+            ]
+        },
+        {
+            "key": "Experimental",
+            "title": "Experimental features",
+            "type": "section",
+            "expandable": true,
+            "expanded": false,
+            "items": [
+                 "EnableAdaptiveLighting",
+                 "CustomTemperatureAdjustment"
+            ]
+        }
+    ]
 }
