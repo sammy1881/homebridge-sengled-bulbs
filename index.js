@@ -17,7 +17,7 @@ function SengledHubPlatform(log, config, api) {
 	this.log = log;
 	this.config = config;
 	this.accessories = {};
-	this.cache_timeout = 60; // seconds
+	this.cache_timeout = 300; // seconds
 	this.debug = config['debug'] || false;
 	this.info = config['info'] || true;
 	this.username = config['username'];
