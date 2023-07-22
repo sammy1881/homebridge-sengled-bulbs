@@ -1,6 +1,6 @@
 {
   "name": "homebridge-sengled-bulbs",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "A unoffical Homebridge plugin for controlling sengled accessories.",
   "main": "index.js",
   "scripts": {
